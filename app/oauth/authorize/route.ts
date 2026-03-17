@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl;
@@ -7,10 +7,10 @@ export async function GET(request: NextRequest) {
   const state = searchParams.get("state");
 
   if (!redirectUri) {
-    return NextResponse.json(
-      { error: "missing redirect_uri" },
-      { status: 400 }
-    );
+    return new Response(JSON.stringify({ error: "missing redirect_uri" }), {
+      status: 400,
+      headers: { "Content-Type": "application/json" },
+    });
   }
 
   const url = new URL(redirectUri);
@@ -19,5 +19,5 @@ export async function GET(request: NextRequest) {
     url.searchParams.set("state", state);
   }
 
-  return NextResponse.redirect(url.toString());
+  return Response.redirect(url.toString(), 302);
 }

@@ -66,13 +66,52 @@ const handler = createMcpHandler(
       {
         title: "List Session Recordings",
         description:
-          "List Microsoft Clarity session recordings with metadata. Supports filtering by date range, device type, browser, OS, country, URLs visited, smart events, user behavior (dead clicks, rage clicks), web vitals, and more. The filters object must include a date field with start and end in ISO 8601 format.",
+          "List Microsoft Clarity session recordings with metadata. Supports filtering by date range, device type, browser, OS, country, and user behavior signals.",
         inputSchema: {
-          filters: z
-            .record(z.unknown())
+          date_start: z
+            .string()
             .describe(
-              "Filter object with fields: date (required, {start, end} in ISO 8601), deviceType, browser, os, country, city, visitedUrls, entryUrls, exitUrls, smartEvents, userType, sessionIntent, deadClickPresent, rageClickPresent, scrollDepth, sessionDuration, and more."
+              "Start date in ISO 8601 format (e.g. 2026-03-10T00:00:00Z). Required."
             ),
+          date_end: z
+            .string()
+            .describe(
+              "End date in ISO 8601 format (e.g. 2026-03-16T23:59:59Z). Required."
+            ),
+          device_type: z
+            .string()
+            .optional()
+            .describe(
+              'Filter by device type: "Desktop", "Mobile", or "Tablet".'
+            ),
+          browser: z
+            .string()
+            .optional()
+            .describe(
+              'Filter by browser name (e.g. "Chrome", "Safari", "Firefox").'
+            ),
+          os: z
+            .string()
+            .optional()
+            .describe(
+              'Filter by operating system (e.g. "Windows", "iOS", "Android").'
+            ),
+          country: z
+            .string()
+            .optional()
+            .describe('Filter by country name (e.g. "United States").'),
+          visited_urls: z
+            .string()
+            .optional()
+            .describe("Filter by URL visited during the session."),
+          rage_click_present: z
+            .boolean()
+            .optional()
+            .describe("If true, only return sessions with rage clicks."),
+          dead_click_present: z
+            .boolean()
+            .optional()
+            .describe("If true, only return sessions with dead clicks."),
           sort_by: z
             .enum([
               "SessionStart_DESC",
@@ -92,10 +131,10 @@ const handler = createMcpHandler(
             .min(1)
             .max(250)
             .optional()
-            .describe("Number of recordings to return (1-250, default 100)"),
+            .describe("Number of recordings to return (1-250, default 100)."),
         },
       },
-      async ({ filters, sort_by, count }) => {
+      async (params) => {
         const sortOptionsMap: Record<string, number> = {
           SessionStart_DESC: 0,
           SessionStart_ASC: 1,
@@ -107,29 +146,37 @@ const handler = createMcpHandler(
           PageCount_DESC: 7,
         };
 
-        const now = new Date().toISOString();
-        const dateFilter = filters.date as
-          | { start?: string; end?: string }
-          | undefined;
-        const endDate = new Date(dateFilter?.end || now);
-        const startDate = new Date(dateFilter?.start || now);
-
-        if (!dateFilter?.start) {
-          startDate.setDate(endDate.getDate() - 2);
-        }
+        const filters: Record<string, unknown> = {
+          date: {
+            start: params.date_start,
+            end: params.date_end,
+          },
+        };
+        if (params.device_type) filters.deviceType = params.device_type;
+        if (params.browser) filters.browser = params.browser;
+        if (params.os) filters.os = params.os;
+        if (params.country) filters.country = params.country;
+        if (params.visited_urls) filters.visitedUrls = params.visited_urls;
+        if (params.rage_click_present !== undefined)
+          filters.rageClickPresent = params.rage_click_present;
+        if (params.dead_click_present !== undefined)
+          filters.deadClickPresent = params.dead_click_present;
 
         const data = await clarityFetch(
           `${API_BASE_URL}/recordings/sample`,
           {
-            sortBy: sortOptionsMap[sort_by || "SessionStart_DESC"] ?? 0,
-            start: startDate.toISOString(),
-            end: endDate.toISOString(),
+            sortBy:
+              sortOptionsMap[params.sort_by || "SessionStart_DESC"] ?? 0,
+            start: params.date_start,
+            end: params.date_end,
             filters,
-            count: count || 100,
+            count: params.count || 100,
           }
         );
         return {
-          content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }],
+          content: [
+            { type: "text" as const, text: JSON.stringify(data, null, 2) },
+          ],
         };
       }
     );
